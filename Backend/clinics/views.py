@@ -10,7 +10,7 @@ class HospitalViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
 
     # Поля, по которым доступна фильтрация
-    filterset_fields = ['city', 'district', 'microdistrict', 'rating']
+    filterset_fields = ['city', 'district']
 
     # Поля, по которым доступна сортировка
     ordering_fields = ['name', 'rating', 'review_count']
