@@ -1,16 +1,95 @@
-.toggle-districts-btn {
-    position: absolute;
-    top: 10px;
-    left: 320px;
-    z-index: 999;
-    padding: 8px 12px;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
+/* Общее оформление страницы с картой */
+.map-page {
+    display: flex;
+    height: 100vh;
+    font-family: sans-serif;
+    color: #333;
 }
 
-.toggle-districts-btn:hover {
-    background: #f0f0f0;
+/* Сайдбар (левая панель) */
+.sidebar {
+    width: 300px;
+    min-width: 250px;
+    max-width: 350px;
+    background-color: #f7f9fc;
+    border-right: 1px solid #ddd;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+/* Заголовки в сайдбаре */
+.sidebar h2,
+.sidebar h3 {
+    margin: 0 0 12px;
+}
+
+/* Селект выбора района */
+.district-select {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+/* Кнопка показать/скрыть районы */
+.toggle-districts-btn2 {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 16px;
+    background-color: #317ae2;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.toggle-districts-btn2:hover {
+    background-color: #255bb8;
+}
+
+/* Список клиник */
+.hospital-list {
+    margin-top: 8px;
+}
+
+/* Карточка клиники */
+.hospital-card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    padding: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.hospital-card__name {
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.hospital-card__address {
+    font-size: 13px;
+    margin-bottom: 4px;
+    color: #555;
+}
+
+.hospital-card__categories {
+    font-size: 12px;
+    color: #777;
+}
+
+/* Контейнер карты (правая часть) */
+.map-container {
+    flex: 1;
+    position: relative;
+}
+
+/* Сама карта занимает всю высоту контейнера */
+.mapbox-container {
+    width: 100%;
+    height: 100%;
 }

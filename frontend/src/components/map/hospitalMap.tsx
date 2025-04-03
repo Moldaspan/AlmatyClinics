@@ -6,29 +6,48 @@ import "@mapbox/mapbox-gl-directions/dist/mapbox-gl-directions.css";
 import "./styles.css";
 import { Hospital } from "../../types/Hospital";
 import { fetchHospitals } from "../../api/hospitalsApi";
+import { fetchDistricts } from "../../api/districtsApi";
 import DistrictsLayer from "./districtLayer";
+import PopulationLayer from "./populationLayer";
 
-const MAPBOX_ACCESS_TOKEN = "pk.eyJ1IjoieWVyc3VsdGFuMjAwNCIsImEiOiJjbThoZGd1cjMwMTBqMmlzYjB5YXI5MnFmIn0.42TYRPw0vaxl7pnFMl8kkw";
+const MAPBOX_ACCESS_TOKEN =
+    "pk.eyJ1IjoieWVyc3VsdGFuMjAwNCIsImEiOiJjbThoZGd1cjMwMTBqMmlzYjB5YXI5MnFmIn0.42TYRPw0vaxl7pnFMl8kkw";
 
 const HospitalMap: React.FC = () => {
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const [map, setMap] = useState<Map | null>(null);
+
     const [hospitals, setHospitals] = useState<Hospital[]>([]);
     const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
     const [directions, setDirections] = useState<MapboxDirections | null>(null);
     const [userMarker, setUserMarker] = useState<mapboxgl.Marker | null>(null);
-    const [showDistricts, setShowDistricts] = useState<boolean>(false);
 
-    // 1. Загружаем список больниц
+    const [showDistricts, setShowDistricts] = useState<boolean>(false);
+    const [showPopulationLayer, setShowPopulationLayer] = useState<boolean>(false);
+    const [selectedDistrict, setSelectedDistrict] = useState<string>("Все районы");
+    const [districts, setDistricts] = useState<string[]>([]);
+    const markersRef = useRef<mapboxgl.Marker[]>([]);
+
+    // Получение списка районов
+    useEffect(() => {
+        const fetchDistrictsList = async () => {
+            const data = await fetchDistricts();
+            const names = data.features.map((f: any) => f.properties.name_ru);
+            setDistricts(names);
+        };
+        fetchDistrictsList();
+    }, []);
+
+    // Загрузка клиник по району
     useEffect(() => {
         const getHospitals = async () => {
-            const hospitalsData = await fetchHospitals();
+            const hospitalsData = await fetchHospitals(selectedDistrict);
             setHospitals(hospitalsData);
         };
         getHospitals();
-    }, []);
+    }, [selectedDistrict]);
 
-    // 2. Инициализация карты + Directions
+    // Инициализация карты
     useEffect(() => {
         if (!mapContainerRef.current) return;
 
@@ -36,14 +55,12 @@ const HospitalMap: React.FC = () => {
         const initMap = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: "mapbox://styles/mapbox/streets-v11",
-            center: [76.889709, 43.238949], // Пример: центр на Алматы
+            center: [76.889709, 43.238949],
             zoom: 12,
         });
 
-        // Контролы навигации (Zoom, Rotate)
         initMap.addControl(new mapboxgl.NavigationControl(), "top-right");
 
-        // Геолокационный контрол (кнопка «Моя локация»)
         const geolocateControl = new mapboxgl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true },
             trackUserLocation: true,
@@ -51,23 +68,20 @@ const HospitalMap: React.FC = () => {
         });
         initMap.addControl(geolocateControl, "top-right");
 
-        // Directions-контрол
         const directionsControl = new MapboxDirections({
             accessToken: MAPBOX_ACCESS_TOKEN,
             unit: "metric",
             profile: "mapbox/driving",
-            // interactive: false, // Если хотите запретить ручной ввод
         });
         initMap.addControl(directionsControl, "top-left");
         setDirections(directionsControl);
 
         setMap(initMap);
 
-        // При размонтировании — удаляем карту
         return () => initMap.remove();
     }, []);
 
-    // 3. Определяем местоположение пользователя
+    // Геолокация пользователя
     useEffect(() => {
         if (!map) return;
 
@@ -75,12 +89,9 @@ const HospitalMap: React.FC = () => {
             (position) => {
                 const lng = position.coords.longitude;
                 const lat = position.coords.latitude;
-                console.log("My location is:", lat, lng);
-
                 setUserLocation([lng, lat]);
                 map.flyTo({ center: [lng, lat], zoom: 14 });
 
-                // Добавим маркер «Вы здесь!»
                 if (!userMarker) {
                     const marker = new mapboxgl.Marker({ color: "blue" })
                         .setLngLat([lng, lat])
@@ -90,13 +101,13 @@ const HospitalMap: React.FC = () => {
                 }
             },
             (error) => {
-                console.error("Ошибка при получении геолокации:", error);
+                console.error("Ошибка геолокации:", error);
             },
             { enableHighAccuracy: true }
         );
     }, [map, userMarker]);
 
-    // 4. По умолчанию точка A (Origin)
+    // Установка начальной точки маршрута
     useEffect(() => {
         if (!directions || !userLocation) return;
 
@@ -104,75 +115,118 @@ const HospitalMap: React.FC = () => {
             type: "Feature",
             geometry: {
                 type: "Point",
-                coordinates: userLocation, // [lng, lat]
+                coordinates: userLocation,
             },
             place_name: "Моё местоположение",
         });
     }, [directions, userLocation]);
 
-    // 5. Расставляем маркеры клиник
+    // Отображение маркеров клиник
     useEffect(() => {
-        if (!map || !hospitals.length) return;
+        if (!map) return;
+
+        markersRef.current.forEach((marker) => marker.remove());
+        markersRef.current = [];
 
         hospitals.forEach((hospital) => {
-            if (
-                !hospital.longitude ||
-                !hospital.latitude ||
-                isNaN(hospital.longitude) ||
-                isNaN(hospital.latitude)
-            ) {
+            const lng = hospital.longitude;
+            const lat = hospital.latitude;
+
+            if (!lng || !lat || isNaN(lng) || isNaN(lat)) {
                 console.warn("Некорректные координаты:", hospital);
                 return;
             }
 
             const marker = new mapboxgl.Marker()
-                .setLngLat([hospital.longitude, hospital.latitude])
+                .setLngLat([lng, lat])
                 .setPopup(
-                    new mapboxgl.Popup().setHTML(`
-            <strong>${hospital.name}</strong><br>
-            ${hospital.address}<br>
-            <p>${hospital.categories}</p>
-          `)
+                    new mapboxgl.Popup().setHTML(
+                        `<strong>${hospital.name}</strong><br>
+                         ${hospital.address}<br>
+                         <p>${hospital.categories}</p>`
+                    )
                 )
                 .addTo(map);
 
-            // Клик по маркеру → Destination
             marker.getElement().addEventListener("click", () => {
                 if (!directions) return;
                 if (!userLocation) {
                     alert("Не удалось определить вашу геопозицию");
                     return;
                 }
+
                 directions.setDestination({
                     type: "Feature",
                     geometry: {
                         type: "Point",
-                        coordinates: [hospital.longitude, hospital.latitude],
+                        coordinates: [lng, lat],
                     },
                     place_name: hospital.name || "Неизвестная клиника",
                 });
             });
+
+            markersRef.current.push(marker);
         });
     }, [map, hospitals, directions, userLocation]);
 
+    // Список клиник
+    const renderHospitalList = () => {
+        if (!hospitals.length) {
+            return <p>Нет клиник для данного района.</p>;
+        }
+
+        return hospitals.map((h) => (
+            <div className="hospital-card" key={h.id}>
+                <div className="hospital-card__name">{h.name}</div>
+                <div className="hospital-card__address">{h.address}</div>
+                <div className="hospital-card__categories">{h.categories}</div>
+            </div>
+        ));
+    };
+
     return (
-        <div className="hospital-map-container" style={{ position: "relative" }}>
+        <div className="map-page">
+            {/* Сайдбар */}
+            <div className="sidebar">
+                <h2>Фильтры</h2>
+                <label>Район:</label>
+                <select
+                    value={selectedDistrict}
+                    onChange={(e) => setSelectedDistrict(e.target.value)}
+                    className="district-select"
+                >
+                    <option value="Все районы">Все районы</option>
+                    {districts.map((d) => (
+                        <option key={d} value={d}>
+                            {d}
+                        </option>
+                    ))}
+                </select>
+
+                <button
+                    className="toggle-districts-btn2"
+                    onClick={() => setShowDistricts(!showDistricts)}
+                >
+                    {showDistricts ? "Скрыть районы" : "Показать районы"}
+                </button>
+
+                <button
+                    className="toggle-districts-btn2"
+                    onClick={() => setShowPopulationLayer(!showPopulationLayer)}
+                >
+                    {showPopulationLayer ? "Скрыть плотность населения" : "Показать плотность населения"}
+                </button>
+
+                <h3>Список клиник</h3>
+                <div className="hospital-list">{renderHospitalList()}</div>
+            </div>
+
             {/* Карта */}
-            <div
-                ref={mapContainerRef}
-                style={{ width: "100%", height: "100vh" }}
-            />
-
-            {/* Кнопка «Показать/Скрыть районы» */}
-            <button
-                className="toggle-districts-btn"
-                onClick={() => setShowDistricts(!showDistricts)}
-            >
-                {showDistricts ? "Скрыть районы" : "Показать районы"}
-            </button>
-
-            {/* Подключаем слой районов (если карта создана) */}
-            {map && <DistrictsLayer map={map} visible={showDistricts} />}
+            <div className="map-container">
+                <div ref={mapContainerRef} className="mapbox-container" />
+                {map && <DistrictsLayer map={map} visible={showDistricts} />}
+                {map && <PopulationLayer map={map} visible={showPopulationLayer} />}
+            </div>
         </div>
     );
 };
