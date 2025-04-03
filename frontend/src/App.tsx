@@ -1,5 +1,5 @@
 import React from "react";
-import HospitalMap from "./components/hospitalMap";
+import HospitalMap from "./components/map/hospitalMap";
 
 const App: React.FC = () => {
   return (
