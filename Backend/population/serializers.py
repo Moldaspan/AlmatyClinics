@@ -6,3 +6,8 @@ class PopulationGridSerializer(serializers.ModelSerializer):
     class Meta:
         model = GridsPopulation
         fields = '__all__'
+
+
+class RegionPopulationSerializer(serializers.Serializer):
+    name_region = serializers.CharField()
+    total_population = serializers.IntegerField()

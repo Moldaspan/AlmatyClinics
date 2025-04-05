@@ -31,4 +31,5 @@ router.register(r'edc-hexa-500x500', EDCHexa500x500ViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    path('api/analytics/', include('analytics.urls')),
 ]
