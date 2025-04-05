@@ -14,6 +14,8 @@ import { getPopulationNearHospital } from "../../utils/getPopulationNearHospital
 
 import DistrictsLayer from "./districtLayer";
 import PopulationLayer from "./populationLayer";
+import { Collapse, Select, Checkbox, Button } from "antd";
+import { EnvironmentOutlined, DatabaseOutlined, StarOutlined } from "@ant-design/icons";
 
 const MAPBOX_ACCESS_TOKEN = "pk.eyJ1IjoieWVyc3VsdGFuMjAwNCIsImEiOiJjbThoZGd1cjMwMTBqMmlzYjB5YXI5MnFmIn0.42TYRPw0vaxl7pnFMl8kkw";
 
@@ -35,30 +37,24 @@ const HospitalMap: React.FC = () => {
 
     const [showDistricts, setShowDistricts] = useState(false);
     const [showPopulationLayer, setShowPopulationLayer] = useState(false);
+    const [activePanels, setActivePanels] = useState<string[]>(["filters", "all", "top5", "layers"]);
+
 
     useEffect(() => {
-        const load = async () => {
-            const res = await fetchDistricts();
+        fetchDistricts().then(res => {
             setDistricts(res.features.map((f: any) => f.properties.name_ru));
-        };
-        load();
+        });
+        fetchPopulationData();
     }, []);
 
     useEffect(() => {
-        const load = async () => {
-            const res = await fetchHospitals(selectedDistrict);
-            setHospitals(res);
-        };
-        load();
+        fetchHospitals(selectedDistrict).then(setHospitals);
     }, [selectedDistrict]);
 
-    useEffect(() => {
-        const load = async () => {
-            const res = await getPopulationData();
-            setPopulationData(res);
-        };
-        load();
-    }, []);
+    const fetchPopulationData = async () => {
+        const res = await getPopulationData();
+        setPopulationData(res);
+    };
 
     useEffect(() => {
         if (!mapContainerRef.current) return;
@@ -79,7 +75,6 @@ const HospitalMap: React.FC = () => {
             trackUserLocation: true,
             showUserHeading: true,
         });
-
         m.addControl(geo, "top-right");
 
         const dir = new MapboxDirections({
@@ -156,6 +151,7 @@ const HospitalMap: React.FC = () => {
 
         setTopHospitals(top);
     }, [userLocation, hospitals, populationData]);
+
     useEffect(() => {
         if (userLocation && directions) {
             directions.setOrigin(userLocation);
@@ -165,46 +161,71 @@ const HospitalMap: React.FC = () => {
     return (
         <div className="map-page">
             <div className="sidebar">
-                <h2>Фильтры</h2>
-                <label>Район:</label>
-                <select
-                    value={selectedDistrict}
-                    onChange={(e) => setSelectedDistrict(e.target.value)}
-                    className="district-select"
+                <Collapse
+                    defaultActiveKey={["filters", "layers", "top5"]}
+                    bordered={false}
+                    style={{ background: "transparent" }}
                 >
-                    <option value="Все районы">Все районы</option>
-                    {districts.map((d) => (
-                        <option key={d} value={d}>{d}</option>
-                    ))}
-                </select>
-
-                <button className="toggle-districts-btn2" onClick={() => setShowDistricts(!showDistricts)}>
-                    {showDistricts ? "Скрыть районы" : "Показать районы"}
-                </button>
-                <button className="toggle-districts-btn2" onClick={() => setShowPopulationLayer(!showPopulationLayer)}>
-                    {showPopulationLayer ? "Скрыть плотность населения" : "Показать плотность населения"}
-                </button>
-
-                <h3>🏥 Топ 5 ближайших больниц</h3>
-                {topHospitals.map((h, i) => (
-                    <div key={h.id} className="hospital-card">
-                        <b>{i + 1}. {h.name}</b>
-                        <div>📍 {h.distance} км</div>
-                        <div>👥 Население поблизости: {h.population}</div>
-                        <button
-                            onClick={() => {
-                                if (!directions || !userLocation) return;
-
-                                directions.setOrigin(userLocation);
-                                directions.setDestination([h.longitude, h.latitude]);
-                                map?.flyTo({ center: [h.longitude, h.latitude], zoom: 14 });
-                            }}
+                    <Collapse.Panel header="🧩 Слои карты" key="layers">
+                        <Checkbox
+                            checked={showDistricts}
+                            onChange={() => setShowDistricts(!showDistricts)}
                         >
-                            Проложить маршрут
-                        </button>
+                            Районы
+                        </Checkbox>
+                        <br />
+                        <Checkbox
+                            checked={showPopulationLayer}
+                            onChange={() => setShowPopulationLayer(!showPopulationLayer)}
+                        >
+                            Плотность населения
+                        </Checkbox>
+                    </Collapse.Panel>
 
-                    </div>
-                ))}
+                    <Collapse.Panel header="⭐ Топ 5 подходящих больниц для вас" key="top5">
+                        {topHospitals.map((h, i) => (
+                            <div key={h.id} className="hospital-card">
+                                <b>{i + 1}. {h.name}</b>
+                                <div>📍 {h.distance} км</div>
+                                <div>👥 Население поблизости: {h.population}</div>
+                                <Button
+                                    type="primary"
+                                    size="small"
+                                    onClick={() => {
+                                        if (!directions || !userLocation) return;
+                                        directions.setOrigin(userLocation);
+                                        directions.setDestination([h.longitude, h.latitude]);
+                                        map?.flyTo({ center: [h.longitude, h.latitude], zoom: 14 });
+                                    }}
+                                    style={{ marginTop: "6px" }}
+                                >
+                                    Проложить маршрут
+                                </Button>
+                            </div>
+                        ))}
+                    </Collapse.Panel>
+                    <Collapse.Panel header="Выберите район для поиска больниц" key="filters">
+                        <Select
+                            value={selectedDistrict}
+                            onChange={setSelectedDistrict}
+                            style={{ width: "100%" }}
+                        >
+                            <Select.Option value="Все районы">Все районы</Select.Option>
+                            {districts.map((d) => (
+                                <Select.Option key={d} value={d}>
+                                    {d}
+                                </Select.Option>
+                            ))}
+                        </Select>
+                        {hospitals.map((h) => (
+                            <div key={h.id} className="hospital-card">
+                                <div className="hospital-card__name">{h.name}</div>
+                                <div className="hospital-card__address">{h.address}</div>
+                                <div className="hospital-card__categories">{h.categories}</div>
+                            </div>
+                        ))}
+                    </Collapse.Panel>
+                </Collapse>
             </div>
 
             <div className="map-container">
