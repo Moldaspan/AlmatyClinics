@@ -3,11 +3,12 @@ import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-do
 import { Layout, Menu, Breadcrumb } from 'antd';
 import {
     BarChartOutlined,
-    EnvironmentOutlined,
+    EnvironmentOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import HospitalMap from "./components/map/hospitalMap";
 import AnalyticsPage from './components/analytics/AnalyticsPage';
 import './App.css';
+import HospitalDemandPage from "./components/hospitalDemand/HospitalDemandPage";
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -33,6 +34,9 @@ const App = () => {
                         </Menu.Item>
                         <Menu.Item key="2" icon={<BarChartOutlined />}>
                             <NavLink to="/analytics">Аналитика</NavLink>
+                        </Menu.Item>
+                        <Menu.Item key="3" icon={<PlusOutlined />}>
+                            <NavLink to="/hospital-demand">Нужда в клиниках</NavLink>
                         </Menu.Item>
                     </Menu>
                 </Sider>
@@ -62,6 +66,7 @@ const App = () => {
                             <Routes>
                                 <Route path="/" element={<HospitalMap />} />
                                 <Route path="/analytics" element={<AnalyticsPage />} />
+                                <Route path="/hospital-demand" element={<HospitalDemandPage />} />
                             </Routes>
                         </div>
                     </Content>

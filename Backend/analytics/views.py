@@ -6,6 +6,8 @@ from rest_framework import status
 
 from clinics.models import Hospital
 from population.models import GridsPopulation
+from django.contrib.gis.geos import Point
+
 
 
 class DistrictAnalyticsView(APIView):
@@ -71,3 +73,40 @@ class AgeStructureAnalyticsView(APIView):
         )
 
         return Response(data, status=status.HTTP_200_OK)
+
+
+class HighDemandZonesView(APIView):
+    def get(self, request):
+        threshold_population = 1500
+        distance_km = 1.0  # минимальное расстояние до ближайшей клиники
+
+        # Получаем координаты всех клиник
+        hospitals = list(Hospital.objects.values_list("x", "y"))  # используем x и y, не longitude/latitude
+
+        # Получаем все grid'ы с населением выше порога
+        grids = GridsPopulation.objects.filter(
+            is_deleted=False,
+            total_sum_population__gte=threshold_population
+        )
+
+        results = []
+
+        for grid in grids:
+            grid_point = grid.geometry.centroid  # это GeoDjango Point
+
+            is_far = all(
+                Point(hx, hy).distance(grid_point) > (distance_km / 111)  # 1 градус ≈ 111 км
+                for hx, hy in hospitals
+            )
+
+            if is_far:
+                results.append({
+                    "id": grid.id,
+                    "x": grid.x,
+                    "y": grid.y,
+                    "population": grid.total_sum_population,
+                    "geometry": grid.geometry.geojson,
+                    "distance_to_nearest": "far"
+                })
+
+        return Response(results, status=status.HTTP_200_OK)

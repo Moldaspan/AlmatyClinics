@@ -38,7 +38,7 @@ const HospitalMap: React.FC = () => {
     const [showDistricts, setShowDistricts] = useState(false);
     const [showPopulationLayer, setShowPopulationLayer] = useState(false);
     const [activePanels, setActivePanels] = useState<string[]>(["filters", "all", "top5", "layers"]);
-
+    const [showDemandLayer, setShowDemandLayer] = useState(false);
 
     useEffect(() => {
         fetchDistricts().then(res => {
