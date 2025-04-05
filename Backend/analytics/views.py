@@ -50,3 +50,24 @@ class DistrictAnalyticsView(APIView):
             })
 
         return Response(result, status=status.HTTP_200_OK)
+
+class AgeStructureAnalyticsView(APIView):
+    def get(self, request):
+        district = request.query_params.get("district")
+
+        queryset = GridsPopulation.objects.filter(is_deleted=False)
+
+        if district and district != "Все районы":
+            queryset = queryset.filter(name_region=district)
+
+        data = queryset.aggregate(
+            f0_14=Sum("f0_14"),
+            f15_25=Sum("f15_25"),
+            f26_35=Sum("f26_35"),
+            f36_45=Sum("f36_45"),
+            f46_55=Sum("f46_55"),
+            f56_65=Sum("f56_65"),
+            f66=Sum("f66"),
+        )
+
+        return Response(data, status=status.HTTP_200_OK)
