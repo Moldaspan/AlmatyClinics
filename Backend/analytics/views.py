@@ -1,5 +1,7 @@
+import requests
 from collections import defaultdict
 from django.db.models import Sum
+from rest_framework.decorators import api_view
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -7,9 +9,13 @@ from rest_framework import status
 from clinics.models import Hospital
 from population.models import GridsPopulation
 from django.contrib.gis.geos import Point
+from geography.models import AddressCityDistrict
+from django.db.models import Count
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
+from .models import CachedHighDemandZone
 
-
-
+@method_decorator(cache_page(60 * 15), name='dispatch')
 class DistrictAnalyticsView(APIView):
     def get(self, request):
         # Собираем население по районам
@@ -53,6 +59,8 @@ class DistrictAnalyticsView(APIView):
 
         return Response(result, status=status.HTTP_200_OK)
 
+
+@method_decorator(cache_page(60 * 15), name='dispatch')
 class AgeStructureAnalyticsView(APIView):
     def get(self, request):
         district = request.query_params.get("district")
@@ -75,38 +83,133 @@ class AgeStructureAnalyticsView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+@method_decorator(cache_page(60 * 15), name='dispatch')
 class HighDemandZonesView(APIView):
     def get(self, request):
-        threshold_population = 1500
-        distance_km = 1.0  # минимальное расстояние до ближайшей клиники
+        zones = CachedHighDemandZone.objects.all()
+        data = [
+            {
+                "x": z.x,
+                "y": z.y,
+                "population": z.population,
+                "district": z.district,
+                "priority": z.priority,
+                "distance_km": z.distance_km,
+                "geometry": z.geometry.geojson,
+                "updated_at": z.updated_at,
+            }
+            for z in zones
+        ]
+        return Response(data)
 
-        # Получаем координаты всех клиник
-        hospitals = list(Hospital.objects.values_list("x", "y"))  # используем x и y, не longitude/latitude
+@cache_page(60 * 15)
+@api_view(['GET'])
+def nearest_hospitals(request):
+    try:
+        lat = float(request.query_params.get('lat'))
+        lon = float(request.query_params.get('lon'))
+    except (TypeError, ValueError):
+        return Response({"error": "Invalid or missing lat/lon parameters"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Получаем все grid'ы с населением выше порога
-        grids = GridsPopulation.objects.filter(
-            is_deleted=False,
-            total_sum_population__gte=threshold_population
-        )
+    user_location = Point(lon, lat, srid=4326)
 
-        results = []
+    # Базовый queryset
+    hospitals = Hospital.objects.exclude(x__isnull=True).exclude(y__isnull=True)
 
-        for grid in grids:
-            grid_point = grid.geometry.centroid  # это GeoDjango Point
+    #Фильтрация по району
+    district = request.query_params.get("district")
+    if district:
+        hospitals = hospitals.filter(district__icontains=district)
 
-            is_far = all(
-                Point(hx, hy).distance(grid_point) > (distance_km / 111)  # 1 градус ≈ 111 км
-                for hx, hy in hospitals
-            )
+    #Фильтрация по ключевому слову в специализации
+    category = request.query_params.get("category")
+    if category:
+        hospitals = hospitals.filter(categories__icontains=category)
 
-            if is_far:
-                results.append({
-                    "id": grid.id,
-                    "x": grid.x,
-                    "y": grid.y,
-                    "population": grid.total_sum_population,
-                    "geometry": grid.geometry.geojson,
-                    "distance_to_nearest": "far"
-                })
+    results = []
+    for h in hospitals:
+        hosp_point = Point(h.x, h.y, srid=4326)
+        distance_km = user_location.distance(hosp_point) * 111
 
-        return Response(results, status=status.HTTP_200_OK)
+        results.append({
+            "name": h.name,
+            "address": h.address,
+            "district": h.district,
+            "distance_km": round(distance_km, 2),
+            "phone": h.phone_1,
+            "website": h.website_1,
+            "categories": h.categories,
+        })
+
+    sorted_results = sorted(results, key=lambda x: x["distance_km"])[:5]
+
+    return Response(sorted_results, status=status.HTTP_200_OK)
+
+@cache_page(60 * 15)
+@api_view(['GET'])
+def clinic_summary(request):
+    hospitals = Hospital.objects.exclude(district__isnull=True).exclude(district="")
+
+    total_clinics = hospitals.count()
+
+    clinics_by_district = (
+        hospitals
+        .values('district')
+        .annotate(count=Count('name'))
+        .order_by('-count')
+    )
+
+    districts_covered = clinics_by_district.count()
+
+    if clinics_by_district:
+        max_district = clinics_by_district[0]
+        min_district = clinics_by_district.last()
+        avg = total_clinics / districts_covered if districts_covered else 0
+    else:
+        max_district = {"district": None, "count": 0}
+        min_district = {"district": None, "count": 0}
+        avg = 0
+
+    return Response({
+        "total_clinics": total_clinics,
+        "districts_covered": districts_covered,
+        "average_clinics_per_district": round(avg, 2),
+        "max_clinic_district": max_district['district'],
+        "min_clinic_district": min_district['district']
+    })
+
+@cache_page(60 * 15)
+@api_view(['GET'])
+def route_to_hospital(request):
+    try:
+        user_lat = float(request.query_params.get("lat"))
+        user_lon = float(request.query_params.get("lon"))
+        hospital_name = request.query_params.get("hospital_name")
+    except (ValueError, TypeError):
+        return Response({"error": "Missing or invalid parameters"}, status=400)
+
+    try:
+        hospital = Hospital.objects.get(name=hospital_name)
+        if hospital.x is None or hospital.y is None:
+            return Response({"error": "Hospital coordinates missing"}, status=400)
+    except Hospital.DoesNotExist:
+        return Response({"error": "Hospital not found"}, status=404)
+
+    # OSRM API (можно заменить на свой локальный сервер или Mapbox)
+    url = f"http://router.project-osrm.org/route/v1/driving/{user_lon},{user_lat};{hospital.x},{hospital.y}?overview=full&geometries=geojson"
+
+    res = requests.get(url)
+    if res.status_code != 200:
+        return Response({"error": "Failed to fetch route"}, status=500)
+
+    route_data = res.json()
+    route = route_data["routes"][0]
+
+    return Response({
+        "hospital": hospital.name,
+        "distance_km": round(route["distance"] / 1000, 2),
+        "duration_min": round(route["duration"] / 60, 1),
+        "route_geometry": route["geometry"]
+    })
+
+

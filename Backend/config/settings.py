@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'clinics',
     'population',
     'geography',
+    'analytics',
 ]
 
 MIDDLEWARE = [
@@ -106,6 +107,18 @@ REST_FRAMEWORK = {
 GDAL_LIBRARY_PATH = config('GDAL_LIBRARY_PATH')
 GEOS_LIBRARY_PATH = config('GEOS_LIBRARY_PATH')
 
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",  # можешь выбрать другой DB (например, 2)
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'  # база 0 под Celery
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
