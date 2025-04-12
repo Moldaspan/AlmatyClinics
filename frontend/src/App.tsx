@@ -9,6 +9,7 @@ import HospitalMap from "./components/map/hospitalMap";
 import AnalyticsPage from './components/analytics/AnalyticsPage';
 import './App.css';
 import HospitalDemandPage from "./components/hospitalDemand/HospitalDemandPage";
+import ChatBot from './components/chatbot/ChatBot';
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -75,6 +76,7 @@ const App = () => {
                     {/*</Footer>*/}
                 </Layout>
             </Layout>
+            <ChatBot />
         </Router>
     );
 };
