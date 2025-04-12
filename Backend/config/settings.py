@@ -23,6 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
 
+# OPENAI_API_KEY = config('OPENAI_API_KEY')
+
+# OPENROUTER_API_KEY = config('OPENROUTER_API_KEY')
+GROQ_API_KEY = config('GROQ_API_KEY')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
