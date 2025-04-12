@@ -14,6 +14,10 @@ from django.db.models import Count
 from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from .models import CachedHighDemandZone
+import pandas as pd
+from django.http import HttpResponse
+from django.db.models import Sum
+from collections import defaultdict
 
 @method_decorator(cache_page(60 * 15), name='dispatch')
 class DistrictAnalyticsView(APIView):
@@ -213,3 +217,104 @@ def route_to_hospital(request):
     })
 
 
+@api_view(['GET'])
+def export_district_stats_excel(request):
+    # Собираем данные как в district-stats
+    population_data = (
+        GridsPopulation.objects
+        .filter(is_deleted=False)
+        .values('name_region')
+        .annotate(total_population=Sum('total_sum_population'))
+    )
+    population_by_region = {entry['name_region']: entry['total_population'] for entry in population_data}
+
+    hospital_data = Hospital.objects.values('district')
+    clinic_count_by_region = defaultdict(int)
+    for hospital in hospital_data:
+        name = hospital['district']
+        if name:
+            clinic_count_by_region[name] += 1
+
+    export_data = []
+    for district, population in population_by_region.items():
+        clinics = clinic_count_by_region.get(district, 0)
+        ppl_per_clinic = round(population / clinics) if clinics > 0 else None
+
+        if ppl_per_clinic is None:
+            status = "no clinics"
+        elif ppl_per_clinic > 20000:
+            status = "critical"
+        elif ppl_per_clinic > 15000:
+            status = "warning"
+        else:
+            status = "normal"
+
+        export_data.append({
+            "Район": district,
+            "Население": population,
+            "Клиник": clinics,
+            "Чел. на 1 клинику": ppl_per_clinic,
+            "Статус": status
+        })
+
+    df = pd.DataFrame(export_data)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=district_stats.xlsx'
+    df.to_excel(response, index=False, engine='openpyxl')
+
+    return response
+
+@api_view(['GET'])
+def export_hospitals_excel(request):
+    hospitals = Hospital.objects.all()
+
+    export_data = []
+
+    for h in hospitals:
+        export_data.append({
+            "Название": h.name,
+            "Район": h.district,
+            "Адрес": h.address,
+            "Город": h.city,
+            "Категории": h.categories,
+            "Часы работы": h.working_hours,
+            "Телефон": h.phone_1,
+            "Веб-сайт": h.website_1,
+            "Instagram": h.instagram,
+            "X": h.x,
+            "Y": h.y,
+        })
+
+    df = pd.DataFrame(export_data)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=hospitals_list.xlsx'
+    df.to_excel(response, index=False, engine='openpyxl')
+
+    return response
+
+@api_view(['GET'])
+def export_high_demand_excel(request):
+    zones = CachedHighDemandZone.objects.all()
+
+    export_data = []
+
+    for z in zones:
+        export_data.append({
+            "Район": z.district,
+            "X": z.x,
+            "Y": z.y,
+            "Население": z.population,
+            "Расстояние до ближайшей клиники (км)": z.distance_km,
+            "Приоритет": z.priority,
+            "Обновлено": z.updated_at,
+        })
+
+    df = pd.DataFrame(export_data)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=high_demand_zones.xlsx'
+    df.to_excel(response, index=False, engine='openpyxl')
+
+    return response
