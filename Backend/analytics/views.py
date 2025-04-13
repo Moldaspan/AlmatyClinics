@@ -87,24 +87,57 @@ class AgeStructureAnalyticsView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+_cached_high_demand_zones = None
 @method_decorator(cache_page(60 * 15), name='dispatch')
 class HighDemandZonesView(APIView):
     def get(self, request):
-        zones = CachedHighDemandZone.objects.all()
-        data = [
-            {
-                "x": z.x,
-                "y": z.y,
-                "population": z.population,
-                "district": z.district,
-                "priority": z.priority,
-                "distance_km": z.distance_km,
-                "geometry": z.geometry.geojson,
-                "updated_at": z.updated_at,
-            }
-            for z in zones
-        ]
-        return Response(data)
+        global _cached_high_demand_zones
+
+        if _cached_high_demand_zones is not None:
+            return Response(_cached_high_demand_zones)
+
+        threshold_population = 1500
+        min_distance_km = 1.0  # минимальное расстояние до ближайшей клиники в км
+        min_degree_distance = min_distance_km / 111  # 1 градус ≈ 111 км
+
+        hospitals = list(Hospital.objects.exclude(x__isnull=True, y__isnull=True).values_list("x", "y"))
+
+        grids = GridsPopulation.objects.filter(
+            is_deleted=False,
+            total_sum_population__gte=threshold_population
+        )
+
+        results = []
+
+        for grid in grids:
+            grid_point = grid.geometry.centroid
+
+            is_far = all(
+                Point(hx, hy).distance(grid_point) > min_degree_distance
+                for hx, hy in hospitals
+            )
+
+            if is_far:
+                priority = (
+                    "critical" if grid.total_sum_population >= 5000 else
+                    "high" if grid.total_sum_population >= 3000 else
+                    "moderate"
+                )
+
+                results.append({
+                    "id": grid.id,
+                    "x": grid_point.x,
+                    "y": grid_point.y,
+                    "population": grid.total_sum_population,
+                    "district": grid.name_region,
+                    "geometry": grid.geometry.geojson,
+                    "priority": priority,
+                })
+
+        _cached_high_demand_zones = results
+        return Response(results, status=status.HTTP_200_OK)
+
+
 
 @cache_page(60 * 15)
 @api_view(['GET'])
