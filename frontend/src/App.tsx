@@ -1,6 +1,6 @@
-import React, {useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import { Layout, Menu, Breadcrumb } from 'antd';
+import { Layout, Menu } from 'antd';
 import {
     BarChartOutlined,
     EnvironmentOutlined, PlusOutlined,
@@ -10,11 +10,19 @@ import AnalyticsPage from './components/analytics/AnalyticsPage';
 import './App.css';
 import HospitalDemandPage from "./components/hospitalDemand/HospitalDemandPage";
 import ChatBot from './components/chatbot/ChatBot';
+import { fetchHospitals } from './api/hospitalsApi';
+import { Hospital } from './types/Hospital';
 
-const { Header, Content, Footer, Sider } = Layout;
+const { Content, Sider } = Layout;
 
 const App = () => {
     const [collapsed, setCollapsed] = useState(false);
+    const [hospitals, setHospitals] = useState<Hospital[]>([]);
+
+    useEffect(() => {
+        fetchHospitals("Все районы").then(setHospitals);
+    }, []);
+
     return (
         <Router>
             <Layout style={{ minHeight: '100vh' }}>
@@ -43,26 +51,7 @@ const App = () => {
                 </Sider>
 
                 <Layout>
-                    {/*<Header*/}
-                    {/*    style={{*/}
-                    {/*        background: '#fff',*/}
-                    {/*        padding: 0,*/}
-                    {/*        textAlign: 'center',*/}
-                    {/*        fontSize: 20,*/}
-                    {/*        boxShadow: '0 2px 8px #f0f1f2',*/}
-                    {/*    }}*/}
-                    {/*>*/}
-                    {/*    Городская карта клиник и аналитика*/}
-                    {/*</Header>   */}
                     <Content style={{ margin: '16px' }}>
-                        {/*<Breadcrumb style={{ margin: '16px 0' }}>*/}
-                        {/*    <Breadcrumb.Item>*/}
-                        {/*        <NavLink to="/">Главная</NavLink>*/}
-                        {/*    </Breadcrumb.Item>*/}
-                        {/*    <Breadcrumb.Item>*/}
-                        {/*        <NavLink to="/analytics">Аналитика</NavLink>*/}
-                        {/*    </Breadcrumb.Item>*/}
-                        {/*</Breadcrumb>*/}
                         <div>
                             <Routes>
                                 <Route path="/" element={<HospitalMap />} />
@@ -71,12 +60,9 @@ const App = () => {
                             </Routes>
                         </div>
                     </Content>
-                    {/*<Footer style={{ textAlign: 'center' }}>*/}
-                    {/*    HealthMap ©2025 Created by YourName*/}
-                    {/*</Footer>*/}
                 </Layout>
             </Layout>
-            <ChatBot />
+            <ChatBot hospitals={hospitals} />
         </Router>
     );
 };
