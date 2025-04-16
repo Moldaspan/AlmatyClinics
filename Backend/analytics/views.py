@@ -111,11 +111,7 @@ class HighDemandZonesView(APIView):
 
         for grid in grids:
             grid_point = grid.geometry.centroid
-
-            is_far = all(
-                Point(hx, hy).distance(grid_point) > min_degree_distance
-                for hx, hy in hospitals
-            )
+            is_far = all(Point(hx, hy).distance(grid_point) > min_degree_distance for hx, hy in hospitals)
 
             if is_far:
                 priority = (
